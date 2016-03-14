@@ -74,11 +74,11 @@ public class VersionInfo {
         (SolrException.ErrorCode.SERVER_ERROR, 
          errPrefix + " (" + VERSION_FIELD + " must be either indexed or have docValues");
     }
-    if ( !sf.stored() ) {
+    /*if ( !sf.stored() ) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
          errPrefix + " (" + VERSION_FIELD + " is not stored");
-    }
+    }*/
     if ( sf.multiValued() ) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 

@@ -37,6 +37,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.solr.core.CoreContainer;
@@ -92,13 +93,28 @@ public class JettySolrRunner {
   private int proxyPort = -1;
 
   public static class DebugFilter implements Filter {
+    public final static Logger log = LoggerFactory.getLogger(DebugFilter.class);
 
     private AtomicLong nRequests = new AtomicLong();
+    
+    private AtomicInteger delayCounter = new AtomicInteger(0);
+    private AtomicInteger delayValue = new AtomicInteger(0);
 
     public long getTotalRequests() {
       return nRequests.get();
 
     }
+    
+    public void setDelay(int count, int delay) {
+      delayCounter.set(count);
+      delayValue.set(delay);
+    }
+    
+    public void unsetDelay() {
+      delayCounter.set(0);
+      delayValue.set(0);
+    }
+
 
     @Override
     public void init(FilterConfig filterConfig) throws ServletException { }
@@ -106,6 +122,17 @@ public class JettySolrRunner {
     @Override
     public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
       nRequests.incrementAndGet();
+      
+      if (delayCounter.decrementAndGet() == 0) {
+        log.info("Pausing this socket connection for " + delayValue.get() + "ms...");
+        try {
+          Thread.sleep(delayValue.get());
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+        unsetDelay();
+      }
+
       filterChain.doFilter(servletRequest, servletResponse);
     }
 

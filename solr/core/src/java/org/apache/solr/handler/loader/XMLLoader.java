@@ -58,6 +58,7 @@ import org.apache.solr.update.AddUpdateCommand;
 import org.apache.solr.update.CommitUpdateCommand;
 import org.apache.solr.update.DeleteUpdateCommand;
 import org.apache.solr.update.RollbackUpdateCommand;
+import org.apache.solr.update.processor.DistributedUpdateProcessor;
 import org.apache.solr.update.processor.UpdateRequestProcessor;
 import org.apache.solr.common.EmptyEntityResolver;
 import org.apache.solr.util.xslt.TransformerProvider;
@@ -229,7 +230,10 @@ public class XMLLoader extends ContentStreamLoader {
             // First look for commitWithin parameter on the request, will be overwritten for individual <add>'s
             addCmd.commitWithin = params.getInt(UpdateParams.COMMIT_WITHIN, -1);
             addCmd.overwrite = params.getBool(UpdateParams.OVERWRITE, true);
-            
+
+            addCmd.isInPlaceUpdate = params.getBool(DistributedUpdateProcessor.DISTRIB_INPLACE_UPDATE, false);
+            addCmd.prevVersion = params.getLong(DistributedUpdateProcessor.DISTRIB_INPLACE_PREVVERSION, 0);
+
             for (int i = 0; i < parser.getAttributeCount(); i++) {
               String attrName = parser.getAttributeLocalName(i);
               String attrVal = parser.getAttributeValue(i);

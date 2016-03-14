@@ -17,6 +17,7 @@
 package org.apache.solr.update;
 
 import java.io.Closeable;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
@@ -26,6 +27,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -42,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.lucene.util.BytesRef;
+import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.SolrInputDocument;
@@ -104,6 +107,7 @@ public class UpdateLog implements PluginInfoInitialized {
   public static final int DELETE = 0x02;
   public static final int DELETE_BY_QUERY = 0x03;
   public static final int COMMIT = 0x04;
+  public static final int UPDATE_INPLACE = 0x08;
   // Flag indicating that this is a buffered operation, and that a gap exists before buffering started.
   // for example, if full index replication starts and we are buffering updates, then this flag should
   // be set to indicate that replaying the log would not bring us into sync (i.e. peersync should
@@ -189,10 +193,16 @@ public class UpdateLog implements PluginInfoInitialized {
   public static class LogPtr {
     final long pointer;
     final long version;
+    final long previousPointer; // used for entries that are partial updates and a pointer to a previous update command is needed
 
     public LogPtr(long pointer, long version) {
+      this(pointer, version, -1);
+    }
+
+    public LogPtr(long pointer, long version, long previousPointer) {
       this.pointer = pointer;
       this.version = version;
+      this.previousPointer = previousPointer;
     }
 
     @Override
@@ -423,25 +433,44 @@ public class UpdateLog implements PluginInfoInitialized {
     synchronized (this) {
       long pos = -1;
 
+      long prevPointer = -1;
+      if (cmd.isInPlaceUpdate) {
+        BytesRef indexedId = cmd.getIndexedId();
+        LogPtr prevEntry = map.get(indexedId);
+        if (prevEntry != null) {
+          prevPointer = prevEntry.pointer;
+        } else if (prevMap != null) {
+          prevEntry = prevMap.get(indexedId);
+          if (prevEntry != null) {
+            prevPointer = prevEntry.pointer;
+          } else if (prevMap2 != null) {
+            prevEntry = prevMap2.get(indexedId);
+            if (prevEntry != null) {
+              prevPointer = prevEntry.pointer;
+            }
+          }
+        }
+      }
+
       // don't log if we are replaying from another log
       if ((cmd.getFlags() & UpdateCommand.REPLAY) == 0) {
         ensureLog();
-        pos = tlog.write(cmd, operationFlags);
+        pos = tlog.write(cmd, prevPointer, operationFlags);
       }
 
       if (!clearCaches) {
         // TODO: in the future we could support a real position for a REPLAY update.
         // Only currently would be useful for RTG while in recovery mode though.
-        LogPtr ptr = new LogPtr(pos, cmd.getVersion());
+        LogPtr ptr = new LogPtr(pos, cmd.getVersion(), prevPointer);
 
         // only update our map if we're not buffering
         if ((cmd.getFlags() & UpdateCommand.BUFFERING) == 0) {
           map.put(cmd.getIndexedId(), ptr);
         }
 
-        if (trace) {
-          log.trace("TLOG: added id " + cmd.getPrintableId() + " to " + tlog + " " + ptr + " map=" + System.identityHashCode(map));
-        }
+        //if (trace) {
+          log.info("TLOG: added id " + cmd.getPrintableId() + "(ver="+cmd.version+", prevVersion="+cmd.prevVersion+", prevPtr="+prevPointer+")" + " to " + tlog + " " + ptr + " map=" + System.identityHashCode(map)+", actual doc="+cmd.solrDoc);
+        //}
 
       } else {
         openRealtimeSearcher();
@@ -702,6 +731,113 @@ public class UpdateLog implements PluginInfoInitialized {
     }
   }
 
+  /**
+   * Goes over backwards, following the prevPointer, to merge partial updates into the passed doc. Stops at either a full
+   * document, or if there are no previous entries to follow in the ulog.
+   *
+   * @param id          Binary representation of the unique key field
+   * @param prevPointer Pointer to the previous entry in the ulog, based on which the current in-place update was made.
+   * @param prevVersion Version of the previous entry in the ulog, based on which the current in-place update was made.
+   * @param doc         Partial document that is to be populated
+   * @return Returns 0 if a full document was found in the log, -1 if no full document was found. If full document was supposed
+   * to be found in the tlogs, but couldn't be found (because the logs were rotated) then the prevPointer is returned.
+   */
+  public long populatePartialUpdates(BytesRef id, long prevPointer, long prevVersion, SolrDocument doc) {
+    SolrInputDocument sdoc = null;
+    boolean terminatesAtFullDoc = false;
+
+    log.debug("populatePartialUpdates: call started with id=" + id + ", prevPtr=" + prevPointer + ", prevVersion=" + prevVersion + ", doc=" + doc);
+
+    while (true) {
+      if (prevPointer == -1) {
+        return prevPointer;
+      }
+      log.debug("Lookup from tlog: id=" + id + ", prevPtr=" + prevPointer + ", prevVersion=" + prevVersion);
+      List<TransactionLog> lookupLogs;
+      synchronized (this) {
+        lookupLogs = new ArrayList<>(Arrays.asList(tlog, prevMapLog, prevMapLog2));
+      }
+      List entry = getEntryFromTLog(id, prevPointer, prevVersion, lookupLogs);
+      log.debug("Lookup done, trying with entry: " + entry + ", while looking for id=" + new String(id.bytes));
+      if (entry == null) {
+        return prevPointer;
+      }
+      int flags = (int) entry.get(0);
+      // if this is an ADD (i.e. full document update), stop here
+      if ((flags & UpdateLog.ADD) == UpdateLog.ADD) {
+        sdoc = (SolrInputDocument) entry.get(entry.size() - 1);
+        terminatesAtFullDoc = true;
+        break;
+      }
+      if (entry.size() < 5) {
+        throw new SolrException(ErrorCode.INVALID_STATE, entry + " is not a partial doc" + ", while looking for id=" + new String(id.bytes));
+      }
+      // this update is an inplace update, get the partial doc
+      sdoc = (SolrInputDocument) entry.get(entry.size() - 1);
+      log.debug("Intermediate partial doc: " + sdoc + "\n\tAt this time, the enriched doc is: " + doc);
+      for (String fieldName : sdoc.getFieldNames()) {
+        if (doc.containsKey(fieldName) == false) {
+          for (Object val : sdoc.getFieldValues(fieldName)) {
+            doc.addField(fieldName, val);
+          }
+        }
+      }
+      log.debug("populatePartialUpdates Earlier prevPointer was: " + prevPointer + ", but now it is: " + entry.get(2) + "+, owing to the latest entry found=" + entry);
+      log.debug("populatePartialUpdates Earlier prevVersion was: " + prevVersion + ", but now it is: " + entry.get(3) + "+, owing to the latest entry found=" + entry);
+      prevPointer = (long) entry.get(2);
+      prevVersion = (long) entry.get(3);
+    }
+    log.debug("populatePartialUpdates entry: " + sdoc + ", while looking for id=" + new String(id.bytes));
+    for (String fieldName : sdoc.getFieldNames()) {
+      if (doc.containsKey(fieldName) == false) {
+        for (Object val : sdoc.getFieldValues(fieldName)) {
+          doc.addField(fieldName, val);
+        }
+      }
+    }
+
+    log.debug("populatePartialUpdates call done: " + terminatesAtFullDoc);
+    return 0;
+  }
+
+  private List getEntryFromTLog(BytesRef id, long lookupPointer, long lookupVersion, List<TransactionLog> lookupLogs) {
+    log.debug("getEntryFromTLog: call started with id=" + id + ", prevPtr=" + lookupPointer + ", prevVersion=" + lookupVersion);
+
+    log.debug("logs=" + (lookupLogs));
+    for (int i = 0; i < lookupLogs.size(); i++) {
+      if (lookupLogs.get(i) != null && lookupLogs.get(i).getLogSize() > lookupPointer) {
+        log.debug("Trying to look in " + i + "th log=" + lookupLogs.get(i));
+        lookupLogs.get(i).incref();
+        try {
+          Object obj = null;
+
+          try {
+            obj = lookupLogs.get(i).lookup(lookupPointer);
+          } catch (Exception | Error ex) {
+            log.debug("Exception reading the log=" + lookupLogs.get(i));
+          }
+          log.debug("Got this object: obj=" + obj + ", at pos=" + lookupPointer + ", log=" + lookupLogs.get(i));
+          if (obj != null && obj instanceof List) {
+            List tmpEntry = (List) obj;
+            if (tmpEntry.size() >= 2 && (tmpEntry.get(1) instanceof Long) && ((Long) tmpEntry.get(1)).equals(lookupVersion)) {
+              log.debug("getEntryFromTLog: returning entry=" + tmpEntry + ", obtained from pos=" + lookupPointer + ", log=" + lookupLogs.get(i));
+              return tmpEntry;
+            } else {
+              log.debug("list rejected: " + tmpEntry + ", I was looking for version=" + lookupVersion + ", log=" + lookupLogs.get(i));
+            }
+          } else {
+            log.debug("obj rejected: " + obj);
+          }
+        } finally {
+          lookupLogs.get(i).decref();
+        }
+      }
+
+      log.warn("Couldn't find id=" + new String(id.bytes) + ", ver=" + lookupVersion + ", in tlogs=" + lookupLogs);
+    }
+    return null;
+  }
+
   public Object lookup(BytesRef indexedId) {
     LogPtr entry;
     TransactionLog lookupLog;
@@ -906,6 +1042,7 @@ public class UpdateLog implements PluginInfoInitialized {
   static class Update {
     TransactionLog log;
     long version;
+    long previousVersion; // for in-place updates
     long pointer;
   }
 
@@ -975,6 +1112,29 @@ public class UpdateLog implements PluginInfoInitialized {
       return result;
     }
 
+    /**
+     * Return all partial updates and full for a particular document, in the range specified by end (inclusive) and start (exclusive) versions.
+     */
+    public List<Object> lookupPartialUpdates(long endVersion, long startVersion) {
+      List<Object> ret = new ArrayList<>();
+
+      long previousVersion = endVersion;
+      while (previousVersion > startVersion) {
+        Update update = updates.get(previousVersion);
+        if (update != null) {
+          ret.add(update.log.lookup(update.pointer));
+        } else {
+          break;
+        }
+        previousVersion = update.previousVersion;
+        log.info("Adding prev version: "+previousVersion);
+
+      }
+
+      Collections.reverse(ret);
+      return ret;
+    }
+
     public int getLatestOperation() {
       return latestOperation;
     }
@@ -1013,6 +1173,7 @@ public class UpdateLog implements PluginInfoInitialized {
 
               switch (oper) {
                 case UpdateLog.ADD:
+                case UpdateLog.UPDATE_INPLACE:
                 case UpdateLog.DELETE:
                 case UpdateLog.DELETE_BY_QUERY:
                   Update update = new Update();
@@ -1020,6 +1181,9 @@ public class UpdateLog implements PluginInfoInitialized {
                   update.pointer = reader.position();
                   update.version = version;
 
+                  if (oper == UpdateLog.UPDATE_INPLACE && entry.size() == 5) {
+                    update.previousVersion = (Long) entry.get(3);
+                  }
                   updatesForLog.add(update);
                   updates.put(version, update);
 
@@ -1369,6 +1533,23 @@ public class UpdateLog implements PluginInfoInitialized {
             long version = (Long) entry.get(1);
 
             switch (oper) {
+              case UpdateLog.UPDATE_INPLACE: {
+                recoveryInfo.adds++;
+                // byte[] idBytes = (byte[]) entry.get(2);
+                SolrInputDocument sdoc = (SolrInputDocument) entry.get(4);
+                long prevVersion = (Long) entry.get(3);
+                AddUpdateCommand cmd = new AddUpdateCommand(req);
+                // cmd.setIndexedId(new BytesRef(idBytes));
+                cmd.solrDoc = sdoc;
+                cmd.setVersion(version);
+                cmd.prevVersion = prevVersion;
+                cmd.isInPlaceUpdate = true;
+                cmd.setFlags(UpdateCommand.REPLAY | UpdateCommand.IGNORE_AUTOCOMMIT);
+                if (debug) log.debug("add " + cmd);
+
+                proc.processAdd(cmd);
+                break;
+              }
               case UpdateLog.ADD: {
                 recoveryInfo.adds++;
                 // byte[] idBytes = (byte[]) entry.get(2);
