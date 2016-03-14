@@ -29,6 +29,7 @@ import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.update.AddUpdateCommand;
 import org.apache.solr.update.DeleteUpdateCommand;
+import org.apache.solr.update.processor.DistributedUpdateProcessor;
 import org.apache.solr.update.processor.UpdateRequestProcessor;
 
 import java.io.EOFException;
@@ -121,6 +122,8 @@ public class JavabinLoader extends ContentStreamLoader {
     addCmd.pollQueueTime = pollQueueTime;
     addCmd.overwrite = params.getBool(UpdateParams.OVERWRITE, true);
     addCmd.commitWithin = params.getInt(UpdateParams.COMMIT_WITHIN, -1);
+    addCmd.isInPlaceUpdate = params.getBool(DistributedUpdateProcessor.DISTRIB_INPLACE_UPDATE, false);
+    addCmd.prevVersion = params.getLong(DistributedUpdateProcessor.DISTRIB_INPLACE_PREVVERSION, 0);
     return addCmd;
   }
 

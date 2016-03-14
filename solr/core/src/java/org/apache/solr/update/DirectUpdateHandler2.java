@@ -29,19 +29,26 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.index.CodecReader;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.SlowCodecReaderWrapper;
+import org.apache.lucene.index.SlowCompositeReaderWrapper;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.util.BytesRefHash;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -279,7 +286,18 @@ public class DirectUpdateHandler2 extends UpdateHandler implements SolrCoreState
       } else {
         Document luceneDocument = cmd.getLuceneDocument();
         // SolrCore.verbose("updateDocument",updateTerm,luceneDocument,writer);
-        writer.updateDocument(updateTerm, luceneDocument);
+        if (cmd.isInPlaceUpdate) {
+          synchronized (solrCoreState.getUpdateLock()) {
+            for (IndexableField field : luceneDocument.getFields()) {
+              //TODO: schema.getField() here is expensive for dynamic fields, can this be avoided?
+              if (cmd.req.getSchema().getField(field.name()).hasDocValues()) { 
+                writer.updateNumericDocValue(updateTerm, field.name(), field.numericValue().longValue());
+              }
+            }
+          }
+        } else {
+          writer.updateDocument(updateTerm, luceneDocument);
+        }
       }
       // SolrCore.verbose("updateDocument",updateTerm,"DONE");
 

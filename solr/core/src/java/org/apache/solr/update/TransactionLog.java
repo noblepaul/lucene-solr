@@ -343,6 +343,10 @@ public class TransactionLog implements Closeable {
   int lastAddSize;
 
   public long write(AddUpdateCommand cmd, int flags) {
+    return write(cmd, -1, flags);
+  }
+
+  public long write(AddUpdateCommand cmd, long prevPointer, int flags) {
     LogCodec codec = new LogCodec(resolver);
     SolrInputDocument sdoc = cmd.getSolrInputDocument();
 
@@ -355,10 +359,19 @@ public class TransactionLog implements Closeable {
 
       MemOutputStream out = new MemOutputStream(new byte[bufSize]);
       codec.init(out);
-      codec.writeTag(JavaBinCodec.ARR, 3);
-      codec.writeInt(UpdateLog.ADD | flags);  // should just take one byte
-      codec.writeLong(cmd.getVersion());
-      codec.writeSolrInputDocument(cmd.getSolrInputDocument());
+      if (cmd.isInPlaceUpdate) {
+        codec.writeTag(JavaBinCodec.ARR, 5);
+        codec.writeInt(UpdateLog.UPDATE_INPLACE | flags);  // should just take one byte
+        codec.writeLong(cmd.getVersion());
+        codec.writeLong(prevPointer);
+        codec.writeLong(cmd.prevVersion);
+        codec.writeSolrInputDocument(cmd.getSolrInputDocument());
+      } else {
+        codec.writeTag(JavaBinCodec.ARR, 3);
+        codec.writeInt(UpdateLog.ADD | flags);  // should just take one byte
+        codec.writeLong(cmd.getVersion());
+        codec.writeSolrInputDocument(cmd.getSolrInputDocument());
+      }
       lastAddSize = (int)out.size();
 
       synchronized (this) {

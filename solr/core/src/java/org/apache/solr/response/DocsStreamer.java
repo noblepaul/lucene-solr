@@ -17,6 +17,7 @@
 package org.apache.solr.response;
 
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -45,11 +46,15 @@ import org.apache.solr.schema.TrieLongField;
 import org.apache.solr.search.DocIterator;
 import org.apache.solr.search.DocList;
 import org.apache.solr.search.SolrReturnFields;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This streams SolrDocuments from a DocList and applies transformer
  */
 public class DocsStreamer implements Iterator<SolrDocument> {
+  private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
   public static final Set<Class> KNOWN_TYPES = new HashSet<>();
 
   private org.apache.solr.response.ResultContext rctx;

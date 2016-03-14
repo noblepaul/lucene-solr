@@ -524,6 +524,24 @@ public class PeerSync  {
         lastVersion = version;
 
         switch (oper) {
+          case UpdateLog.UPDATE_INPLACE:
+          {
+            // byte[] idBytes = (byte[]) entry.get(2);
+            SolrInputDocument sdoc = (SolrInputDocument)entry.get(4);
+            long prevVersion = (Long) entry.get(3);
+            AddUpdateCommand cmd = new AddUpdateCommand(req);
+            // cmd.setIndexedId(new BytesRef(idBytes));
+            cmd.solrDoc = sdoc;
+            cmd.setVersion(version);
+            cmd.prevVersion = prevVersion;
+            cmd.isInPlaceUpdate = true;
+            cmd.setFlags(UpdateCommand.PEER_SYNC | UpdateCommand.IGNORE_AUTOCOMMIT);
+            if (debug) {
+              log.info(msg() + "Inplace add " + cmd + " prevVersion="+cmd.prevVersion+", id " + sdoc.getField("id"));
+            }
+            proc.processAdd(cmd);
+            break;
+          }
           case UpdateLog.ADD:
           {
             // byte[] idBytes = (byte[]) entry.get(2);
