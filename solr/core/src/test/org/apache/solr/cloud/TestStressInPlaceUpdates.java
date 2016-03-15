@@ -200,14 +200,12 @@ public class TestStressInPlaceUpdates extends AbstractFullDistribZkTestBase {
                   
                   if (rand.nextInt(100) < softCommitPercent) {
                     verbose("softCommit start");
-                    //commit("softCommit","true");
                     clients.get(chosenClientIndex).commit(true, true, true);
                     verbose("softCommit end");
                   } else {
                     verbose("hardCommit start");
-                    //commit();
+                    commit();
                     clients.get(chosenClientIndex).commit();
-
                     verbose("hardCommit end");
                   }
 
