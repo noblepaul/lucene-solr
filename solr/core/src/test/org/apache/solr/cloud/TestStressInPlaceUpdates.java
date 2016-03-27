@@ -143,7 +143,7 @@ public class TestStressInPlaceUpdates extends AbstractFullDistribZkTestBase {
 
     // query variables
     final int percentRealtimeQuery = 75;
-    final AtomicLong operations = new AtomicLong(200000);  // number of query operations to perform in total
+    final AtomicLong operations = new AtomicLong(50000);  // number of query operations to perform in total
     int nReadThreads = 5 + random().nextInt(25);
 
 
