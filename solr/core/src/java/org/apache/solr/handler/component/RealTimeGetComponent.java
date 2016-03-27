@@ -28,8 +28,6 @@ import org.apache.commons.lang.mutable.MutableInt;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.document.LegacyLongField;
-import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.MatchAllDocsQuery;
@@ -363,11 +361,11 @@ public class RealTimeGetComponent extends SearchComponent
       SolrDocument doc = toSolrDoc(luceneDocument, core.getLatestSchema());
       searcher.decorateDocValueFields(doc, docid, searcher.getNonStoredDVs(false));
 
-      if (partialDoc != null) {
+      if (partialDoc != null) { // nocommit: just for debug logging. remove this block upon a commit.
         long docVersion = doc.getFirstValue("_version_") instanceof Long? (long)doc.getFirstValue("_version_"):
-          ((LegacyLongField)doc.getFirstValue("_version_")).numericValue().longValue();
+          Long.parseLong(doc.get("_version_").toString());
         long partialDocVersion = partialDoc.getFirstValue("_version_") instanceof Long? (long)partialDoc.getFirstValue("_version_"):
-          ((LegacyLongField)partialDoc.getFirstValue("_version_")).numericValue().longValue();
+          Long.parseLong(doc.get("_version_").toString());
 
         log.warn("Version which I was trying to find: "+partialDocVersion+", instead returning: "+docVersion);
         log.warn("Even after failing to resolve full doc from tlog, returning one from reopened rt searcher: "+doc);
@@ -418,9 +416,9 @@ public class RealTimeGetComponent extends SearchComponent
       log.debug("mpdwfdfi DoCuMeNt obtained from index is: "+doc);
 
       long docVersion = doc.getFirstValue("_version_") instanceof Long? (long)doc.getFirstValue("_version_"):
-        ((LegacyLongField)doc.getFirstValue("_version_")).numericValue().longValue();
+        Long.parseLong(doc.get("_version_").toString());
       long partialDocVersion = partialDoc.getFirstValue("_version_") instanceof Long? (long)partialDoc.getFirstValue("_version_"):
-        ((LegacyLongField)partialDoc.getFirstValue("_version_")).numericValue().longValue();
+        Long.parseLong(doc.get("_version_").toString());
       if (docVersion > partialDocVersion) {
         log.debug("mpdwfdfi This is your warning sign, the correct doc to return is: "+doc);
         return doc;
@@ -572,12 +570,7 @@ public class RealTimeGetComponent extends SearchComponent
         }
       }
       else {
-        SchemaField sf = schema.getFieldOrNull(f.name());
-        if (sf.multiValued()) {
-          out.addField( f.name(), f );
-        } else {
-          // if we've already added this field (i.e. existing != null) and this is single valued field, then don't add again
-        }
+        out.addField( f.name(), f );
       }
     }
     return out;
