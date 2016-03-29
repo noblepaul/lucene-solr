@@ -1012,12 +1012,13 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
     // if this is an inplace update, check and wait if we should be waiting for a dependent update, before 
     // entering the synchronized block
     if (!leaderLogic && cmd.isInPlaceUpdate) {
-      waitForDependentUpdates(cmd, versionOnUpdate, isReplayOrPeersync, true, bucket, vinfo);
+      waitForDependentUpdates(cmd, versionOnUpdate, isReplayOrPeersync, true, bucket);
     }
 
     vinfo.lockForUpdate();
     try {
       synchronized (bucket) {
+        bucket.notifyAll();//just in case anyone is waiting let them know that we have a new update
         // we obtain the version when synchronized and then do the add so we can ensure that
         // if version1 < version2 then version1 is actually added before version2.
 
@@ -1092,7 +1093,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
                 // So we shouldn't be here, unless something happened in between waitForDependentUpdates and
                 // this synchronized block.
                 // TODO: Should we call waitForDependentUpdates() again?
-                throw new SolrException(ErrorCode.SERVER_ERROR, "Something weird has happened. lastVersion: " + 
+                throw new SolrException(ErrorCode.SERVER_ERROR, "Something weird has happened. lastVersion: " +
                     lastVersion + ", prev: " + prev + ", id: " + idBytes.utf8ToString());
               }
 
@@ -1105,7 +1106,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
               } else {
                 // We're good, we should apply this update. First, update the bucket's highest.
                 if (bucketVersion != 0 && bucketVersion < versionOnUpdate) {
-                  bucket.updateHighest(versionOnUpdate);    
+                  bucket.updateHighest(versionOnUpdate);
                 }
               }
             } else { // non inplace update, i.e. full document update 
@@ -1124,7 +1125,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
                   log.debug("Dropping add update due to version {}", idBytes.utf8ToString());
                   return true;
                 }
-                
+
                 // also need to re-apply newer deleteByQuery commands
                 checkDeleteByQueries = true;
               }
@@ -1152,24 +1153,26 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
     }
     return false;
   }
-  
+
   void waitForDependentUpdates(AddUpdateCommand cmd, long versionOnUpdate,
-      boolean isReplayOrPeersync, boolean fetchFromLeader, VersionBucket bucket, VersionInfo vinfo) throws IOException {
+                               boolean isReplayOrPeersync, boolean fetchFromLeader, VersionBucket bucket) throws IOException {
     long lastFoundVersion = 0;
     boolean foundDependentUpdate = false;
-    int timeToWait = 1000; // 1 sec
-    int numPolls = 100;
-    for (int i = 0; i < numPolls; i++) {
+    int i = 0;
+    long waitTill = System.nanoTime() + 5 * 1000 * 1000;//wait for 5 secs
+    for (; System.nanoTime() < waitTill; i++) {
       long prev = cmd.prevVersion;
       lastFoundVersion = vinfo.lookupVersion(cmd.getIndexedId());
       if (lastFoundVersion < prev) {
         log.info("Re-ordered inplace update. version=" + (cmd.getVersion() == 0 ? versionOnUpdate : cmd.getVersion()) +
-            ", prevVersion=" + prev + ", lastVersion=" + lastFoundVersion + ". Waiting attempt: " + i 
+            ", prevVersion=" + prev + ", lastVersion=" + lastFoundVersion + ". Waiting attempt: " + i
             + ", replayOrPeerSync=" + isReplayOrPeersync);
-        try {
-          Thread.sleep(timeToWait/numPolls);
-        } catch (InterruptedException e) {
-          throw new RuntimeException(e);
+        synchronized (bucket) {
+          try {
+            bucket.wait(100);
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
         }
       } else if (lastFoundVersion > prev) {
         log.info("Update was applied on version: " + prev + ", but last version I have is: " + lastFoundVersion
@@ -1197,7 +1200,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
         foundDependentUpdate = true;
         log.info("Fetched missing dependent updates from leader, which likely succeeded. Current update: " + cmd + ", Missing update: " + uc);
       } else {
-        throw new SolrException(ErrorCode.SERVER_ERROR, "Waited for " + timeToWait/1000 + " sec and then asked the leader for the "
+        throw new SolrException(ErrorCode.SERVER_ERROR, "Waited for " + ((1000000-  waitTill- System.nanoTime())/1000 )  + " ms and then asked the leader for the "
             + "missing update, but dependent update didn't arrive. Last found version: " + lastFoundVersion + ", was looking for: "
             + cmd.prevVersion);
       }
@@ -1224,12 +1227,12 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
     Object missingUpdates = rsp.get("updates");
     if (missingUpdates == null) return null;
     List<UpdateCommand> updates = new ArrayList<>();
-    for (List entry: (List<List>) missingUpdates) {
-      int oper = ((int)entry.get(0)) & UpdateLog.OPERATION_MASK;
+    for (List entry : (List<List>) missingUpdates) {
+      int oper = ((int) entry.get(0)) & UpdateLog.OPERATION_MASK;
       long version = (Long) entry.get(1);
       switch (oper) {
         case UpdateLog.ADD: {
-          SolrInputDocument sdoc = (SolrInputDocument)entry.get(entry.size()-1);
+          SolrInputDocument sdoc = (SolrInputDocument) entry.get(entry.size() - 1);
           AddUpdateCommand cmd = new AddUpdateCommand(req);
           cmd.solrDoc = sdoc;
           cmd.setVersion(version);
@@ -1237,7 +1240,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
           break;
         }
         case UpdateLog.UPDATE_INPLACE: {
-          SolrInputDocument sdoc = (SolrInputDocument)entry.get(entry.size()-1);
+          SolrInputDocument sdoc = (SolrInputDocument) entry.get(entry.size() - 1);
           long prevVersion = (Long) entry.get(3);
           AddUpdateCommand cmd = new AddUpdateCommand(req);
           cmd.solrDoc = sdoc;
@@ -1245,7 +1248,7 @@ public class DistributedUpdateProcessor extends UpdateRequestProcessor {
           cmd.prevVersion = prevVersion;
           cmd.isInPlaceUpdate = true;
           updates.add(cmd);
-          break;            
+          break;
         }
       }
     }
