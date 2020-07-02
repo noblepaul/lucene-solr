@@ -48,8 +48,7 @@ public interface ReplicaAssignStrategy {
 
     /**
      * This method is invoked before anything else is done.
-     * choose to read any configuartion that may be stored in ZK etc.
-     * @param cloudManager
+     * choose to read any configuration that may be stored in ZK etc.
      */
     void init(SolrCloudManager cloudManager);
 
