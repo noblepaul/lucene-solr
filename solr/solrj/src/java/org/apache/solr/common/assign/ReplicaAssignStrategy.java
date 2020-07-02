@@ -11,6 +11,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
+ * The implementation class can be stored in clusterprops.json as follows
+ * {
+ *     assign-strategy : {
+ *         class : class-name
+ *         package-version: package-version
+ *     }
+ * }
+ * A user can load an assign-strategy from a package stored in package store and load it using the prefix notation
+ * e.g: assign-strategy: packag-ename:fully.qualified.ClassName. If the package name prefix is used , ensure that package-version
+ * is provided.
+ * If this is configured, Solr will use this everywhere replicas need to be assigned
+ *
  * Every implementation of assign-strategy should implemenmt this interface
  * A new instance is created just in time for computing operations. This instance will
  * be thrown away after the computations are over
