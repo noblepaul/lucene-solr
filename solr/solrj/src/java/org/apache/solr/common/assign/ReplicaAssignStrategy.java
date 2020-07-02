@@ -65,13 +65,11 @@ public interface ReplicaAssignStrategy {
     interface Operation {
         /**Generic method invocation endpoint for v2 APIs
          *
-         * @return
          */
         String endPoint();
 
         /** The payload. This will be serialized to JSON and will be psosted to SOlr
          *
-         * @return
          */
         MapWriter payload();
 
@@ -86,9 +84,6 @@ public interface ReplicaAssignStrategy {
      * This operation adds a replica to a given collection/shard
      */
     interface AddOperation extends Operation {
-        default IntentType collectionAction(){
-            return IntentType.ADD;
-        }
         String targetNode();
         String collection();
         String slice();
@@ -100,9 +95,7 @@ public interface ReplicaAssignStrategy {
      * This operation does move a replica from one node to another
      */
     interface MoveOperation extends AddOperation {
-        default  IntentType collectionAction(){
-            return IntentType.MOVE;
-        }
+
         String fromNode();
         String replicaName();
     }
