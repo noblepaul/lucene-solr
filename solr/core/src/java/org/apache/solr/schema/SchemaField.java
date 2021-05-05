@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.lucene.document.Field;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
@@ -114,6 +115,10 @@ public final class SchemaField extends FieldProperties implements IndexableField
   public boolean isRequired() { return required; }
   public boolean isLarge() { return (properties & LARGE_FIELD)!=0;}
   public Map<String,?> getArgs() { return Collections.unmodifiableMap(args); }
+
+  public Field.Store store() {
+    return stored() ? Field.Store.YES : Field.Store.NO;
+  }
 
   // things that should be determined by field type, not set as options
   boolean isTokenized() { return (properties & TOKENIZED)!=0; }

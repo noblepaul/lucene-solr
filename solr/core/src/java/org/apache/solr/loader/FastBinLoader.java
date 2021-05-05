@@ -80,7 +80,6 @@ public class FastBinLoader extends RequestHandlerBase {
       try {
         ctx.iw.addDocument(ctx.document);
         ctx.document.clear();
-
         ctx.packedBytes.clear();
       } catch (IOException ioException) {
         throw new RuntimeException(ioException);
@@ -96,7 +95,7 @@ public class FastBinLoader extends RequestHandlerBase {
         FastFieldReader ffr = sf.getFastFieldReader();
         if (ffr != null) {
           //this type is optimized to be indexed live
-          ffr.addFields(ctx);
+          ffr.addDocFields(ctx);
         } else {
           for (IndexableField f : sf.getType().createFields(sf, e.val())) {
             if (f != null) { // null fields are not added

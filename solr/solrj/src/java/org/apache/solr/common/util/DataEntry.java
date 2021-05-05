@@ -114,21 +114,71 @@ public interface DataEntry {
    */
   enum Type {
     NULL(true),
-    LONG(true),
-    INT(true),
+    LONG(true, false, true) ,
+    INT(true,false,true),
     BOOL(true),
-    FLOAT(true),
-    DOUBLE(true),
-    DATE(true),
+    FLOAT(true, false, true) {
+      @Override
+      public int intVal(DataEntry e) {
+        return (int)longVal(e);
+      }
+
+      @Override
+      public long longVal(DataEntry e) {
+        return Double.doubleToLongBits(e.doubleVal());
+      }
+    },
+    DOUBLE(true, false, true){
+      @Override
+      public int intVal(DataEntry e) {
+        return (int)Double.doubleToLongBits(doubleVal(e));
+      }
+    },
+    DATE(true, false, true) {
+      @Override
+      public int intVal(DataEntry e) {
+        return super.intVal(e);
+      }
+    },
     /**
      * A map like json object
      */
-    KEYVAL_ITER(false, true),
+    KEYVAL_ITER(false, true, false),
     /**
      * An array like json object
      */
-    ENTRY_ITER(false, true),
-    STR(false),
+    ENTRY_ITER(false, true, false),
+    STR(false) {
+      @Override
+      public int intVal(DataEntry e) {
+        return Integer.parseInt(e.strValue());
+      }
+
+      @Override
+      public long longVal(DataEntry e) {
+        return Long.parseLong(e.strValue());
+      }
+
+      @Override
+      public double doubleVal(DataEntry e) {
+        return Double.parseDouble(e.strValue());
+      }  @Override
+
+      public float floatVal(DataEntry e) {
+        return Float.parseFloat(e.strValue());
+      }
+
+      @Override
+      public boolean boolVal(DataEntry e) {
+        switch (e.strValue()) {
+          case "true": return true;
+          case "false": return false;
+          case "TRUE": return true;
+          case "FALSE": return false;
+          default: throw new RuntimeException("Unknown boolean value : "+ e.strValue());
+        }
+      }
+    },
     BYTEARR(false),
     /**
      * don't know how to stream it. read as an object using {{@link DataEntry#val()}} method
@@ -141,13 +191,36 @@ public interface DataEntry {
 
     public final boolean isContainer;
 
+    public final boolean isNumber;
+
     Type(boolean isPrimitive) {
-      this(isPrimitive, false);
+      this(isPrimitive, false, false);
     }
 
-    Type(boolean isPrimitive, boolean isContainer) {
+    Type(boolean isPrimitive, boolean isContainer, boolean isNumber) {
       this.isPrimitive = isPrimitive;
       this.isContainer = isContainer;
+      this.isNumber = isNumber;
+    }
+
+    public int intVal(DataEntry e) {
+      return e.intVal();
+    }
+
+    public long longVal(DataEntry e) {
+      return e.longVal();
+    }
+
+    public double doubleVal(DataEntry e){
+      return e.doubleVal();
+    }
+
+    public float floatVal(DataEntry e){
+      return (float) e.doubleVal();
+    }
+
+    public boolean boolVal(DataEntry e) {
+      return e.boolVal();
     }
   }
 

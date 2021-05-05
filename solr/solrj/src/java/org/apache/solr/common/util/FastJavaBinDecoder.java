@@ -150,6 +150,7 @@ public class FastJavaBinDecoder implements DataEntry.FastDecoder {
     EntryImpl parent, child;
     long numericVal;
     double doubleVal;
+    float floatVal;
     Object objVal;
     public Object ctx;
     boolean boolVal;
@@ -162,6 +163,9 @@ public class FastJavaBinDecoder implements DataEntry.FastDecoder {
     int depth = 0;
     CharSequence name;
 
+    EntryImpl(){
+      reset();
+    }
 
     EntryImpl getChildAndReset() {
       if (child == null) {
@@ -230,25 +234,26 @@ public class FastJavaBinDecoder implements DataEntry.FastDecoder {
 
     @Override
     public int intVal() {
-      return (int) numericVal;
+      if(tag.type == Type.INT || tag.type == Type.LONG) return (int) numericVal;
+      return ((Number) val()).intValue();
     }
 
     @Override
     public long longVal() {
-      return numericVal;
+      if(tag.type == Type.INT || tag.type == Type.LONG) return (int) numericVal;
+      return ((Number) val()).longValue();
     }
 
     @Override
     public float floatVal() {
-      if(tag.type == Type.FLOAT) return (float) doubleVal;
-      else {
-        return ((Number) val()).floatValue();
-      }
+      if(tag.type == Type.FLOAT) return floatVal;
+      return ((Number) val()).floatValue();
     }
 
     @Override
     public double doubleVal() {
-      return doubleVal;
+      if(tag.type == Type.DOUBLE) return doubleVal;
+      return ((Number)val()).doubleValue();
     }
 
     @Override
@@ -271,7 +276,8 @@ public class FastJavaBinDecoder implements DataEntry.FastDecoder {
 
     void reset() {
       this.doubleVal = 0.0d;
-      this.numericVal = 0l;
+      this.floatVal = 0.0f;
+      this.numericVal = 0L;
       this.objVal = null;
       this.ctx = null;
       this.entryListener = null;
@@ -378,12 +384,12 @@ public class FastJavaBinDecoder implements DataEntry.FastDecoder {
     _FLOAT(FLOAT, LOWER_5_BITS, DataEntry.Type.FLOAT) {
       @Override
       public void lazyRead(EntryImpl entry, StreamCodec streamCodec) throws IOException {
-        entry.doubleVal = streamCodec.dis.readFloat();
+        entry.floatVal = streamCodec.dis.readFloat();
       }
 
       @Override
       public Object readObject(StreamCodec codec, EntryImpl entry) {
-        return Float.valueOf((float) entry.doubleVal);
+        return Float.valueOf(entry.floatVal);
       }
     },
     _DATE(DATE, LOWER_5_BITS, DataEntry.Type.DATE) {

@@ -31,12 +31,16 @@ public interface Utf8CharSequence extends CharSequence , Comparable, Cloneable {
    * possible into the buffer and then return how many bytes were written. It's the responsibility
    * of the caller to call this method repeatedly and ensure that everything is completely written
    *
-   * @param start  position from which to start writing
+   * @param start  position from which to start writing. use this to write only a portion of the utf8
    * @param buffer the buffer to which to write to
-   * @param pos    position to start writing
+   * @param pos    position int the buffer to start writing
    * @return no:of bytes written
    */
   int write(int start, byte[] buffer, int pos);
+
+  default int write(byte[] buffer, int pos) {
+    return write(0, buffer, pos);
+  }
 
   /**
    * The size of utf8 bytes

@@ -29,7 +29,7 @@ import org.apache.solr.schema.SchemaField;
  */
 public interface FastFieldReader {
 
-  void addFields(Ctx ctx);
+  void addDocFields(Ctx ctx);
   class Ctx {
     final PackedBytes packedBytes = new PackedBytes();
     SchemaField field;
@@ -41,6 +41,11 @@ public interface FastFieldReader {
 
     public SchemaField getSchemaField(){return field;}
     public DataEntry getDataEntry(){return data;}
-    public Document getDoc(){return document;}
+    public Document getDoc() { return document;}
+    public int intVal() { return data.type().intVal(data); }
+    public long longVal() { return data.type().longVal(data);}
+    public float floatVal() { return data.type().floatVal(data); }
+    public double doubleVal() { return data.type().doubleVal(data); }
+    public boolean boolVal() { return data.type().boolVal(data); }
   }
 }
