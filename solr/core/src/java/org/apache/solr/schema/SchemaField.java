@@ -31,7 +31,7 @@ import org.apache.lucene.search.SortField;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.loader.FieldsCollector;
-import org.apache.solr.loader.FastFieldReaders;
+import org.apache.solr.loader.FieldCollectors;
 import org.apache.solr.response.TextResponseWriter;
 
 /**
@@ -60,7 +60,7 @@ public final class SchemaField extends FieldProperties implements IndexableField
    */
   public SchemaField(String name, FieldType type) {
     this(name, type, type.properties, null);
-    this.fieldsCollector = FastFieldReaders.getInst(type);
+    this.fieldsCollector = FieldCollectors.getInst(type);
   }
 
   /** Create a new SchemaField from an existing one by using all

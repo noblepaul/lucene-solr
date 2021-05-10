@@ -47,7 +47,7 @@ import org.apache.solr.schema.StrField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class FastFieldReaders {
+public class FieldCollectors {
   private static final BytesRef TRUE = new BytesRef("true");
   private static final BytesRef FALSE = new BytesRef("false");
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());

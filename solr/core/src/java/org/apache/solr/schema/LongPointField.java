@@ -29,7 +29,7 @@ import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
-import org.apache.solr.loader.FastFieldReaders;
+import org.apache.solr.loader.FieldCollectors;
 import org.apache.solr.search.QParser;
 import org.apache.solr.uninverting.UninvertingReader.Type;
 
@@ -42,7 +42,7 @@ public class LongPointField extends PointField implements LongValueFieldType {
 
   public LongPointField() {
     type = NumberType.LONG;
-    fastFieldReader = FastFieldReaders.LongType.INST;
+    fastFieldReader = FieldCollectors.LongType.INST;
   }
 
   @Override
