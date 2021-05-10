@@ -37,7 +37,7 @@ public class FastBinLoader extends RequestHandlerBase {
   @Override
   public void handleRequestBody(SolrQueryRequest req, SolrQueryResponse rsp) throws Exception {
     RefCounted<IndexWriter> ref = req.getCore().getSolrCoreState().getIndexWriter(req.getCore());
-    FastFieldReader.Ctx ctx= new FastFieldReader.Ctx();
+    FieldsCollector.FieldCtx ctx= new FieldsCollector.FieldCtx();
     ctx.iw = ref.get();
     ctx.document = new Document();
     ctx.schema = req.getSchema();
@@ -69,9 +69,9 @@ public class FastBinLoader extends RequestHandlerBase {
   }
 
   private static class FieldsListener implements DataEntry.EntryListener {
-   FastFieldReader.Ctx ctx;
+   FieldsCollector.FieldCtx ctx;
 
-    public FieldsListener(FastFieldReader.Ctx ctx) {
+    public FieldsListener(FieldsCollector.FieldCtx ctx) {
       this.ctx = ctx;
     }
 
@@ -92,10 +92,10 @@ public class FastBinLoader extends RequestHandlerBase {
       SchemaField sf = null;
       if (name != null &&
           (sf = ctx.schema.getField(name.toString())) != null) {
-        FastFieldReader ffr = sf.getFastFieldReader();
+        FieldsCollector ffr = sf.getFieldsCollector();
         if (ffr != null) {
           //this type is optimized to be indexed live
-          ffr.addDocFields(ctx);
+          ffr.collectFields(ctx);
         } else {
           for (IndexableField f : sf.getType().createFields(sf, e.val())) {
             if (f != null) { // null fields are not added

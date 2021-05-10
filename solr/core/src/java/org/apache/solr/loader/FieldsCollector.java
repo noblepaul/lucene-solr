@@ -27,10 +27,10 @@ import org.apache.solr.schema.SchemaField;
  * and write to lucene index
  *
  */
-public interface FastFieldReader {
+public interface FieldsCollector {
 
-  void addDocFields(Ctx ctx);
-  class Ctx {
+  void collectFields(FieldCtx ctx);
+  class FieldCtx {
     final PackedBytes packedBytes = new PackedBytes();
     SchemaField field;
     DataEntry data;
@@ -39,8 +39,8 @@ public interface FastFieldReader {
     IndexSchema schema;
 
 
-    public SchemaField getSchemaField(){return field;}
-    public DataEntry getDataEntry(){return data;}
+    public SchemaField getSchemaField() { return field;}
+    public DataEntry getDataEntry() { return data;}
     public Document getDoc() { return document;}
     public int intVal() { return data.type().intVal(data); }
     public long longVal() { return data.type().longVal(data);}

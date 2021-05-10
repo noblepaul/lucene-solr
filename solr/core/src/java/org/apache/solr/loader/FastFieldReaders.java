@@ -51,7 +51,7 @@ public class FastFieldReaders {
   private static final BytesRef TRUE = new BytesRef("true");
   private static final BytesRef FALSE = new BytesRef("false");
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
-  static final Map<Class<?extends FieldType>, FastFieldReader> readers = new ImmutableMap.Builder<Class<?extends FieldType>, FastFieldReader>()
+  static final Map<Class<?extends FieldType>, FieldsCollector> readers = new ImmutableMap.Builder<Class<?extends FieldType>, FieldsCollector>()
       .put(StrField.class, new StrType())
       .put(IntPointField.class, new IntType())
       .put(LongPointField.class, new LongType())
@@ -61,13 +61,13 @@ public class FastFieldReaders {
       .build();
 
 
-  public static FastFieldReader getInst(FieldType type) {
+  public static FieldsCollector getInst(FieldType type) {
     return readers.get(type.getClass());
   }
 
-  static class StrType implements FastFieldReader {
+  static class StrType implements FieldsCollector {
     @Override
-    public void addDocFields(Ctx ctx) {
+    public void collectFields(FieldCtx ctx) {
       ByteArrayUtf8CharSequence utf8 = (ByteArrayUtf8CharSequence) ctx.data.val();
       BytesRef bytesRef = new BytesRef(utf8.getBuf(), utf8.offset(), utf8.length());
       if(!ignore(ctx.field))
@@ -83,9 +83,9 @@ public class FastFieldReaders {
       }
     }
   }
-  static class BoolType implements FastFieldReader {
+  static class BoolType implements FieldsCollector {
     @Override
-    public void addDocFields(Ctx ctx) {
+    public void collectFields(FieldCtx ctx) {
       if(ctx.field.indexed()) ctx.document.add(ctx.field.getType().createField(ctx.field, ctx.boolVal()? "true": "false"));
       if(ctx.field.hasDocValues()) {
         if (ctx.field.multiValued()) {
@@ -98,44 +98,44 @@ public class FastFieldReaders {
   }
   static class DoubleType extends PointType {
     @Override
-    IndexableField indexedField(Ctx ctx) { return new DoublePoint(ctx.field.getName(), ctx.doubleVal()); }
+    IndexableField indexedField(FieldCtx ctx) { return new DoublePoint(ctx.field.getName(), ctx.doubleVal()); }
 
     @Override
-    StoredField storedField(Ctx ctx) { return new StoredField(ctx.field.getName(), ctx.doubleVal()); }
+    StoredField storedField(FieldCtx ctx) { return new StoredField(ctx.field.getName(), ctx.doubleVal()); }
 
   }
   static class FloatType extends PointType {
 
     @Override
-    IndexableField indexedField(Ctx ctx) { return new FloatPoint(ctx.field.getName(), ctx.floatVal()); }
+    IndexableField indexedField(FieldCtx ctx) { return new FloatPoint(ctx.field.getName(), ctx.floatVal()); }
 
     @Override
-    StoredField storedField(Ctx ctx) { return new StoredField(ctx.field.getName(), ctx.floatVal()); }
+    StoredField storedField(FieldCtx ctx) { return new StoredField(ctx.field.getName(), ctx.floatVal()); }
   }
   static class LongType extends PointType {
 
     @Override
-    IndexableField indexedField(Ctx ctx) { return new LongPoint(ctx.field.getName(), ctx.longVal());}
+    IndexableField indexedField(FieldCtx ctx) { return new LongPoint(ctx.field.getName(), ctx.longVal());}
 
     @Override
-    StoredField storedField(Ctx ctx) { return new StoredField(ctx.field.getName(), ctx.longVal()); }
+    StoredField storedField(FieldCtx ctx) { return new StoredField(ctx.field.getName(), ctx.longVal()); }
   }
 
   static class IntType extends PointType {
     @Override
-    IndexableField indexedField(Ctx ctx) { return new IntPoint(ctx.field.getName(), ctx.intVal()); }
+    IndexableField indexedField(FieldCtx ctx) { return new IntPoint(ctx.field.getName(), ctx.intVal()); }
 
     @Override
-    StoredField storedField(Ctx ctx) { return new StoredField(ctx.field.getName(), ctx.intVal()); }
+    StoredField storedField(FieldCtx ctx) { return new StoredField(ctx.field.getName(), ctx.intVal()); }
   }
 
-  static abstract class PointType implements FastFieldReader {
+  static abstract class PointType implements FieldsCollector {
 
-    abstract IndexableField indexedField(Ctx ctx);
-    abstract StoredField storedField(Ctx ctx);
+    abstract IndexableField indexedField(FieldCtx ctx);
+    abstract StoredField storedField(FieldCtx ctx);
 
     @Override
-    public void addDocFields(Ctx ctx) {
+    public void collectFields(FieldCtx ctx) {
       if (ctx.field.indexed()) ctx.document.add(indexedField(ctx));
       if (ctx.field.hasDocValues()) {
         if (ctx.field.multiValued()) {

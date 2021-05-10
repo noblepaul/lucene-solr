@@ -30,7 +30,7 @@ import org.apache.lucene.index.IndexableFieldType;
 import org.apache.lucene.search.SortField;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.util.SimpleOrderedMap;
-import org.apache.solr.loader.FastFieldReader;
+import org.apache.solr.loader.FieldsCollector;
 import org.apache.solr.loader.FastFieldReaders;
 import org.apache.solr.response.TextResponseWriter;
 
@@ -49,7 +49,7 @@ public final class SchemaField extends FieldProperties implements IndexableField
   final int properties;
   final String defaultValue;
   boolean required = false;  // this can't be final since it may be changed dynamically
-  private FastFieldReader fastFieldReader;
+  private FieldsCollector fieldsCollector;
   
   /** Declared field property overrides */
   Map<String,Object> args = Collections.emptyMap();
@@ -60,7 +60,7 @@ public final class SchemaField extends FieldProperties implements IndexableField
    */
   public SchemaField(String name, FieldType type) {
     this(name, type, type.properties, null);
-    this.fastFieldReader = FastFieldReaders.getInst(type);
+    this.fieldsCollector = FastFieldReaders.getInst(type);
   }
 
   /** Create a new SchemaField from an existing one by using all
@@ -461,7 +461,7 @@ public final class SchemaField extends FieldProperties implements IndexableField
     return null;
   }
 
-  public FastFieldReader getFastFieldReader() {
-    return fastFieldReader;
+  public FieldsCollector getFieldsCollector() {
+    return fieldsCollector;
   }
 }
